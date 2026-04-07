@@ -221,6 +221,127 @@ def render_generate_button():
             time.sleep(0.5)
 
 
+def render_export_jianying_button():
+    """渲染导出到剪映草稿按钮和处理逻辑"""
+    import os
+    import time
+    import uuid
+    from loguru import logger
+    
+    # 初始化session state
+    if 'show_jianying_export_form' not in st.session_state:
+        st.session_state['show_jianying_export_form'] = False
+    if 'jianying_export_result' not in st.session_state:
+        st.session_state['jianying_export_result'] = None
+    if 'jianying_export_error' not in st.session_state:
+        st.session_state['jianying_export_error'] = None
+    
+    if st.button("📤 导出到剪映草稿", use_container_width=True, type="secondary"):
+        config.save_config()
+        
+        if not st.session_state.get('video_clip_json_path'):
+            st.error("脚本文件不能为空")
+            return
+        if not st.session_state.get('video_origin_path'):
+            st.error("视频文件不能为空")
+            return
+        
+        jianying_draft_path = config.ui.get("jianying_draft_path", "")
+        if not jianying_draft_path:
+            st.error("请在基础设置中配置剪映草稿地址")
+            return
+        
+        if not os.path.exists(jianying_draft_path):
+            st.error(f"剪映草稿文件夹不存在: {jianying_draft_path}")
+            return
+        
+        # 显示导出表单
+        st.session_state['show_jianying_export_form'] = True
+        st.session_state['jianying_export_result'] = None
+        st.session_state['jianying_export_error'] = None
+    
+    # 显示导出表单
+    if st.session_state['show_jianying_export_form']:
+        st.markdown("---")
+        st.subheader("导出到剪映草稿")
+        
+        draft_name = st.text_input(
+            "请输入剪映草稿名称",
+            value=f"NarratoAI_{int(time.time())}",
+            key="draft_name_input"
+        )
+        
+        if st.button("确认导出", key="confirm_export"):
+            if not draft_name:
+                st.error("请输入草稿名称")
+                return
+            
+            # 获取音频设置
+            tts_engine = st.session_state.get('tts_engine', 'azure')
+            voice_name = st.session_state.get('voice_name', 'zh-CN-YunjianNeural')
+            voice_rate = st.session_state.get('voice_rate', 1.0)
+            voice_pitch = st.session_state.get('voice_pitch', 1.0)
+            
+            # 创建任务ID
+            task_id = str(uuid.uuid4())
+            st.session_state['task_id'] = task_id
+            
+            # 构建参数
+            logger.debug(f"准备创建VideoClipParams，草稿名称: '{draft_name}'")
+            params = VideoClipParams(
+                video_clip_json_path=st.session_state['video_clip_json_path'],
+                video_origin_path=st.session_state['video_origin_path'],
+                tts_engine=tts_engine,
+                voice_name=voice_name,
+                voice_rate=voice_rate,
+                voice_pitch=voice_pitch,
+                n_threads=config.app.get('n_threads', 4),
+                video_aspect=VideoAspect.landscape,
+                subtitle_enabled=st.session_state.get('subtitle_enabled', False),
+                font_name=st.session_state.get('font_name', 'Microsoft YaHei'),
+                font_size=st.session_state.get('font_size', 24),
+                text_fore_color=st.session_state.get('text_fore_color', '#FFFFFF'),
+                subtitle_position=st.session_state.get('subtitle_position', 'bottom'),
+                custom_position=st.session_state.get('custom_position', 70.0),
+                tts_volume=st.session_state.get('tts_volume', 1.0),
+                original_volume=st.session_state.get('original_volume', 0.7),
+                bgm_volume=st.session_state.get('bgm_volume', 0.3),
+                draft_name=draft_name
+            )
+            
+            with st.spinner("正在导出到剪映草稿，请稍候..."):
+                try:
+                    from app.services import jianying_task
+                    
+                    # 调用导出到剪映草稿的任务
+                    result = jianying_task.start_export_jianying_draft(task_id, params)
+                    
+                    # 记录日志
+                    logger.info(f"成功导出到剪映草稿: {result['draft_name']}")
+                    logger.info(f"草稿已保存到: {result['draft_path']}")
+                    
+                    # 保存结果到session state
+                    st.session_state['jianying_export_result'] = result
+                    st.session_state['jianying_export_error'] = None
+                    st.session_state['show_jianying_export_form'] = False
+                    
+                    st.success(f"✅ 成功导出到剪映草稿: {result['draft_name']}")
+                    st.info(f"📁 草稿已保存到: {result['draft_path']}")
+                except Exception as e:
+                    logger.error(f"导出到剪映草稿失败: {e}")
+                    import traceback
+                    logger.error(f"错误详情: {traceback.format_exc()}")
+                    st.session_state['jianying_export_error'] = str(e)
+                    st.session_state['jianying_export_result'] = None
+                    st.error(f"❌ 导出到剪映草稿失败: {e}")
+        
+        if st.button("取消", key="cancel_export"):
+            st.session_state['show_jianying_export_form'] = False
+            st.session_state['jianying_export_result'] = None
+            st.session_state['jianying_export_error'] = None
+            st.rerun()
+
+
 
 def main():
     """主函数"""
@@ -285,6 +406,7 @@ def main():
 
     # 放到最后渲染生成按钮和处理逻辑
     render_generate_button()
+    render_export_jianying_button()
 
 
 if __name__ == "__main__":
