@@ -217,6 +217,15 @@ def render_proxy_settings(tr):
         config.proxy["http"] = ""
         config.proxy["https"] = ""
 
+    # 剪映草稿地址设置
+    st.subheader("剪映草稿设置")
+    jianying_draft_path = st.text_input(
+        "剪映草稿文件夹路径",
+        value=config.ui.get("jianying_draft_path", ""),
+        help="剪映草稿文件夹路径，例如：C:\\Users\\用户名\\Documents\\JianyingPro Drafts"
+    )
+    config.ui["jianying_draft_path"] = jianying_draft_path
+
 
 def test_vision_model_connection(api_key, base_url, model_name, provider, tr):
     """测试视觉模型连接
